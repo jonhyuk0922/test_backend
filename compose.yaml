@@ -1,21 +1,22 @@
 version: '3.8'
 
 services:
-  frontend:
+  vllm:
     build: 
-      context: ./frontend
-      dockerfile: Dockerfile
+      context: ./backend
+      dockerfile: Dockerfile.vllm
     ports:
-      - "8501:8501"
-    environment:
-      - BACKEND_URL=http://backend:8000
-    depends_on:
-      backend:
-        condition: service_healthy
-    networks:
-      - app-network
+      - "8000:8000"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     volumes:
-      - ./frontend:/app
+      - ./backend:/app
+      - ~/.cache/huggingface:/root/.cache/huggingface
 
   backend:
     build: 
@@ -27,25 +28,36 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_DB=0
+      - VLLM_HOST=http://vllm:8000
     env_file:
       - .env
     depends_on:
-      redis:
-        condition: service_healthy
+      - vllm
+      - redis
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
-    networks:
-      - app-network
     volumes:
       - ./backend:/app
 
+  frontend:
+    build: 
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "8501:8501"
+    environment:
+      - BACKEND_URL=http://backend:8000
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+
   redis:
     image: redis/redis-stack:latest
-    container_name: redis-stack
     ports:
       - "6379:6379"
     volumes:
@@ -55,12 +67,10 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
-    networks:
-      - app-network
 
 networks:
-  app-network:
-    driver: bridge
+  default:
+    name: app-network
 
 volumes:
-  redis-data: 
+  redis-data:

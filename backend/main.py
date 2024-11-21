@@ -2,11 +2,10 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 import os
 from dotenv import load_dotenv
-from langchain_openai import ChatOpenAI
 from langchain_community.chat_message_histories import RedisChatMessageHistory
-from langchain.memory import ConversationBufferMemory
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables.history import RunnableWithMessageHistory
+from langchain_community.llms import VLLMOpenAI
 
 # 환경변수 로드
 load_dotenv()
@@ -40,15 +39,21 @@ def get_message_history(session_id: str):
         url=get_redis_url()
     )
 
-# OpenAI 모델 초기화
-chat = ChatOpenAI(
-    model="gpt-4o-mini",
+# vLLM 모델 초기화
+llm = VLLMOpenAI(
+    model_name="Bllossom/llama-3.2-Korean-Bllossom-3B",
     temperature=0.7,
+    max_tokens=2048,
+    top_p=0.95,
+    vllm_kwargs={
+        "trust_remote_code": True,
+        "tensor_parallel_size": 1
+    }
 )
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat_with_counselor(chat_input: ChatInput):
-    print(f"Received input: {chat_input}")  # 입력 데이터 로깅
+    print(f"Received input: {chat_input}")
     try:
         # 프롬프트 템플릿 생성
         prompt = ChatPromptTemplate.from_messages([
@@ -58,7 +63,7 @@ async def chat_with_counselor(chat_input: ChatInput):
         ])
         
         # 체인 생성
-        chain = prompt | chat
+        chain = prompt | llm
         
         # Runnable with history 생성
         chain_with_history = RunnableWithMessageHistory(
@@ -74,9 +79,9 @@ async def chat_with_counselor(chat_input: ChatInput):
             config={"configurable": {"session_id": chat_input.session_id}}
         )
         
-        return ChatResponse(message=response.content)
+        return ChatResponse(message=response)
     except Exception as e:
-        print(f"Error: {str(e)}")  # 오류 로깅
+        print(f"Error: {str(e)}")
         raise
 
 @app.get("/health")

@@ -1,10 +1,13 @@
 fastapi
 uvicorn
-streamlit
-requests
 pydantic
-redis
 python-dotenv
 langchain
-langchain-community 
+langchain-community
 langchain-openai
+redis
+vllm
+transformers
+accelerate
+sentencepiece
+protobuf
